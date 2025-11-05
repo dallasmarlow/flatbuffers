@@ -512,7 +512,8 @@ class CppGenerator : public BaseGenerator {
     // Generate forward declarations for all equal operators
     if (opts_.generate_object_based_api && opts_.gen_compare) {
       for (const auto& struct_def : parser_.structs_.vec) {
-        if (!struct_def->generated) {
+        const auto native_type = struct_def->attributes.Lookup("native_type");
+        if (!struct_def->generated && !native_type) {
           SetNameSpace(struct_def->defined_namespace);
           auto nativeName = NativeName(Name(*struct_def), struct_def, opts_);
           code_ += "bool operator==(const " + nativeName + " &lhs, const " +
@@ -2190,6 +2191,12 @@ class CppGenerator : public BaseGenerator {
 
   void GenCompareOperator(const StructDef& struct_def,
                           const std::string& accessSuffix = "") {
+    // Do not generate compare operators for native types.
+    const auto native_type = struct_def.attributes.Lookup("native_type");
+    if (native_type) {
+      return;
+    }
+
     std::string compare_op;
     for (auto it = struct_def.fields.vec.begin();
          it != struct_def.fields.vec.end(); ++it) {
@@ -3820,16 +3827,16 @@ class CppGenerator : public BaseGenerator {
       code_ += "}";
       code_ += "";
 
-      // Generate the X::Pack member function that simply calls the global
-      // CreateX function.
-      code_ += "inline " + TablePackSignature(struct_def, false, opts_) + " {";
-      code_ += "  return Create{{STRUCT_NAME}}(_fbb, _o, _rehasher);";
+      // Generate the global CreateX function that simply calls the
+      // X::Pack member function.
+      code_ +=
+          "inline " + TableCreateSignature(struct_def, false, opts_) + " {";
+      code_ += "  return {{STRUCT_NAME}}::Pack(_fbb, _o, _rehasher);";
       code_ += "}";
       code_ += "";
 
       // Generate a CreateX method that works with an unpacked C++ object.
-      code_ +=
-          "inline " + TableCreateSignature(struct_def, false, opts_) + " {";
+      code_ += "inline " + TablePackSignature(struct_def, false, opts_) + " {";
       code_ += "  (void)_rehasher;";
       code_ += "  (void)_o;";
 
